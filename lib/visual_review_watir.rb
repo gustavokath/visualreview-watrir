@@ -27,4 +27,12 @@ class VisualReviewWatir
     return true if response && response.code == "200"
     false
   end
+
+  def start_run(project_name, suite_name)
+
+  end
+
+  def create_new_run(project_name, suite_name)
+    
+  end
 end
