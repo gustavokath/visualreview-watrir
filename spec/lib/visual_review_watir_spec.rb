@@ -24,15 +24,23 @@ module Lib
       context 'when server is active' do
         it 'rerturns true' do
           seccessful_request = double(Net::HTTPOK, code: "200")
-          allow_any_instance_of(Net::HTTP).to receive(:get_response).and_return(seccessful_request)
+          allow(Net::HTTP).to receive(:get_response).and_return(seccessful_request)
           status = visual_review.server_active?
           expect(status).to be true
+        end
+        context 'and response is invalid' do
+          it 'returns false' do
+            request = double(Net::HTTPInternalServerError, code: "500")
+            allow(Net::HTTP).to receive(:get_response).and_return(request)
+            status = visual_review.server_active?
+            expect(status).to be false
+          end
         end
       end
 
       context 'when server is not active' do
         it 'returns false' do
-          allow_any_instance_of(Net::HTTP).to receive(:get_response).and_return(nil)
+          allow(Net::HTTP).to receive(:get_response).and_raise(Errno::ECONNREFUSED)
           status = visual_review.server_active?
 
           expect(status).to be false
@@ -44,22 +52,24 @@ module Lib
       context 'when api version is compatible' do
         let(:valid_response){double(Net::HTTPCreated, code: "201", body: post_runs_response_body)}
         let(:valid_api){double(Net::HTTPOK, code: "200", body: "1")}
-        before(:all) do
-          allow(Net::HTTP).to receive(:request).and_return(valid_response)
-          allow(VisualReviewWatir).to receive(:checkApiVersion).and_return(valid_api)
-        end
 
         it 'returns run id info' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          allow_any_instance_of(VisualReviewWatir).to receive(:check_api_version).and_return(valid_api)
           response = visual_review.start_run("Project0", "Suite1")
-          expect(response.has_key?("run_id"))
+          expect(response.has_key?("id"))
         end
 
         it 'returns run date info' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          allow_any_instance_of(VisualReviewWatir).to receive(:check_api_version).and_return(valid_api)
           response = visual_review.start_run("Project0", "Suite1")
           expect(response.has_key?("run_date"))
         end
 
         it 'returns hash' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          allow_any_instance_of(VisualReviewWatir).to receive(:check_api_version).and_return(valid_api)
           response = visual_review.start_run("Project0", "Suite1")
           expect(response).to be_a(Hash)
         end
@@ -67,8 +77,93 @@ module Lib
       context 'when api version is not compatible' do
         let(:invalid_api){double(Net::HTTPOK, code: "200", body: "50")}
         it 'returns runtimeError exeception' do
-          allow(VisualReviewWatir).to receive(:checkApiVersion).and_return(invalid_api)
-          expect{visual_review.start_run("Project0", "Suite1")}.to raise_error
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(invalid_api)
+          expect{visual_review.start_run("Project0", "Suite1")}.to raise_error(RuntimeError)
+        end
+      end
+    end
+
+    describe '#create_new_run' do
+      context 'when response code is valid' do
+        let(:valid_response){double(Net::HTTPCreated, code: "201", body: post_runs_response_body)}
+        it 'returns a hash' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          response = visual_review.send(:create_new_run,"Project0", "Suite1")
+          expect(response).to be_a(Hash)
+        end
+
+        it 'returns run id info' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          response = visual_review.send(:create_new_run,"Project0", "Suite1")
+          expect(response.has_key?("id"))
+        end
+
+        it 'returns run date info' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          response = visual_review.send(:create_new_run,"Project0", "Suite1")
+          expect(response.has_key?("run_date"))
+        end
+
+        context 'and run id is not returned' do
+          let(:invalid_body){"{\"id\":null,\"suiteId\":1,\"branchName\":\"master\",\"baselineTreeId\":1,\"startTime\":\"2015-12-24T15:41:48-0200\",\"endTime\":null,\"status\":\"running\",\"projectId\":1}"}
+          let(:invalid_response){ double(Net::HTTPCreated, code: "201", body: invalid_body)}
+          it 'raises an error' do
+            allow_any_instance_of(Net::HTTP).to receive(:request).and_return(invalid_response)
+            expect{visual_review.send(:create_new_run,"Project0", "Suite1")}.to raise_error(RuntimeError)
+          end
+        end
+      end
+      context 'when response code is invalid' do
+        let(:invalid_response){ double(Net::HTTPOK, code: "200", body: post_runs_response_body)}
+        it 'raises an error' do
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(invalid_response)
+          expect{visual_review.send(:create_new_run,"Project0", "Suite1")}.to raise_error(RuntimeError)
+        end
+      end
+    end
+
+    describe '#call_server' do
+      context 'when response is successfull' do
+        context 'and request has body' do
+          let(:valid_response){double(Net::HTTPCreated, code: "201", body: post_runs_response_body)}
+          let(:body) {{ :projectName => "Project0", :suiteName => "Suite1" }}
+          it 'returns valid response' do
+            allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+            response = visual_review.send(:call_server, 'post', 'runs', body)
+            expect(response.code).to eql(valid_response.code)
+          end
+        end
+
+        context 'when request does not have body' do
+          let(:valid_response){double(Net::HTTPOK, code: "200", body: post_runs_response_body)}
+          it 'returns valid response' do
+            allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+            response = visual_review.send(:call_server, 'get', 'runs/1')
+            expect(response.code).to eql(valid_response.code)
+          end
+        end
+      end
+      context 'when response fails' do
+        it 'raises an error' do
+           failed_response = double(Net::HTTPInternalServerError, code: "500", body: "Internal Server Error")
+           allow_any_instance_of(Net::HTTP).to receive(:request).and_return(failed_response)
+           expect{ visual_review.send(:call_server, 'get', 'runs/1') }.to raise_error(RuntimeError)
+        end
+      end
+    end
+    describe '#check_api_version' do
+      context 'when api is compatible' do
+        it 'does not rise error' do
+          response = double(Net::HTTPOK, code: "200", body: "1")
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(response)
+          expect{ visual_review.send(:check_api_version)}.to_not raise_error
+        end
+      end
+      context 'when api  not is compatible' do
+        it 'rises error' do
+          response = double(Net::HTTPOK, code: "200", body: "50")
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(response)
+          expect{ visual_review.send(:check_api_version)}.to raise_error(RuntimeError)
         end
       end
     end
