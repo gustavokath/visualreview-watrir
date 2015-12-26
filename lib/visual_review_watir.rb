@@ -1,6 +1,7 @@
 require 'net/http'
-require 'byebug'
 require 'logger'
+require 'json'
+require 'byebug'
 
 class VisualReviewWatir
   APIVERSION = 1
@@ -19,7 +20,7 @@ class VisualReviewWatir
   end
 
   def server_active?
-    uri = URI.parse("#{@hostname}:#{@port}")
+    uri = URI.parse("http://#{@hostname}:#{@port}")
     begin
       response = Net::HTTP.get_response(uri)
     rescue

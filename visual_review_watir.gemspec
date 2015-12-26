@@ -1,5 +1,5 @@
 Gem::Specification.new do |s|
-  s.name        = 'VisualReview-Watir'
+  s.name        = 'visual_review_watir'
   s.version     = '0.0.0'
   s.date        = '2015-12-17'
   s.summary     = "Visual Review + Watir WebDriver"
@@ -11,5 +11,5 @@ Gem::Specification.new do |s|
   s.license     = 'MIT'
 
   s.add_development_dependency "rspec", "~> 3.4"
-  s.add_development_dependency "simplecov"
+  s.add_development_dependency 'simplecov', '~> 0'
 end
