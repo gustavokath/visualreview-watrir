@@ -3,6 +3,7 @@ module Lib
   describe VisualReviewWatir do
     let(:visual_review){ VisualReviewWatir.new }
     let(:post_runs_response_body){"{\"id\":3,\"suiteId\":1,\"branchName\":\"master\",\"baselineTreeId\":1,\"startTime\":\"2015-12-24T15:41:48-0200\",\"endTime\":null,\"status\":\"running\",\"projectId\":1}"}
+    let(:post_screenshot_response_body){"{\"id\":21,\"size\":57842,\"properties\":{\"browser\":\"firefox\"},\"meta\":{},\"screenshotName\":\"1\",\"runId\":90,\"imageId\":34}"}
     describe '.initialize' do
       context 'instalize component' do
         it 'with default values' do
@@ -142,6 +143,19 @@ module Lib
             expect(response.code).to eql(valid_response.code)
           end
         end
+
+        context 'when request has multipart data' do
+          let(:valid_response){double(Net::HTTPCreated, code: "201", body: post_screenshot_response_body)}
+          let(:valid_mock_multipart){[Part.new(:name => "screenshotName", :body => "name", :content_type => "text/plain"),
+             Part.new(:name => "properties", :body => JSON.dump({"browser": "firefox"}), :content_type => "application/json"),
+             Part.new(:name => "meta", :body => '{}', :content_type => "application/json"),
+             Part.new(:name => 'file', :body => "\x89PNG\r\n\x1A\n\x00", :filename => 'f.png', :content_type => 'image/png')]}
+          it 'returns valid response' do
+            allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+            response = visual_review.send(:call_server, 'post','runs/3/screenshots', nil, valid_mock_multipart)
+            expect(response.code).to eql(valid_response.code)
+          end
+        end
       end
       context 'when response fails' do
         it 'raises an error' do
@@ -151,6 +165,38 @@ module Lib
         end
       end
     end
+
+    describe '#take_screenshot' do
+      let(:fake_png){"\x89PNG\r\n\x1A\n\x00"}
+      let(:screenshot_obj){double(Watir::Screenshot, png: fake_png)}
+      let(:browser){double(Watir::Browser, name: "firefox", screenshot: screenshot_obj)}
+      context 'when response is valid' do
+        let(:valid_response){double(Net::HTTPCreated, code: "201", body: post_screenshot_response_body)}
+        it 'returns json' do
+          allow(visual_review).to receive(:actual_run).and_return({:id => 3})
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          response = visual_review.take_screenshot("screenshot0", browser)
+          expect(response).to be_a(Hash)
+        end
+      end
+
+      context 'when response code is invalid' do
+        let(:valid_response){double(Net::HTTPOK, code: "200", body: '{"error":"Screenshot with identical name and properties was already uploaded in this run"}')}
+        it 'raises error' do
+          allow(visual_review).to receive(:actual_run).and_return({:id => 3})
+          allow_any_instance_of(Net::HTTP).to receive(:request).and_return(valid_response)
+          expect{visual_review.take_screenshot("screenshot0", browser)}.to raise_error(RuntimeError)
+        end
+      end
+
+      context 'when run id could not be found' do
+        it 'raises error' do
+          allow(visual_review).to receive(:actual_run).and_return({:id => nil})
+          expect{visual_review.take_screenshot("screenshot0", browser)}.to raise_error(RuntimeError)
+        end
+      end
+    end
+
     describe '#check_api_version' do
       context 'when api is compatible' do
         it 'does not rise error' do
