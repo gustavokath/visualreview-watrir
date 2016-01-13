@@ -10,6 +10,9 @@ Gem::Specification.new do |s|
   s.homepage    = 'http://rubygems.org/gems/hola'
   s.license     = 'MIT'
 
+  s.add_runtime_dependency 'multipart_body', '~> 0.2', '>= 0.2.1' 
+  s.add_runtime_dependency 'watir-webdriver', '~> 0.9', '>= 0.9.1' 
+
   s.add_development_dependency "rspec", "~> 3.4"
   s.add_development_dependency 'simplecov', '~> 0'
 end
